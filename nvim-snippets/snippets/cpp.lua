@@ -10,14 +10,20 @@ local function mirror(args)
 end
 
 return {
-  -- Simplified Base Template
+  -- Simplified Base Template with Clean Debug Macro (No Colors/Extra Headers)
   s("cp_base", {
     t({"#include <bits/stdc++.h>", "using namespace std;", "using ll = long long;", "", ""}),
     t({"#define FASTIO() ios_base::sync_with_stdio(false); cin.tie(nullptr)", "#define YES_NO(v) (cout << (v ? \"YES\\n\" : \"NO\\n\"))", ""}),
-    t({"#define all(x) (x).begin(), (x).end()", "#define sz(x) (int)(x).size()", "", ""}),
+    t({"#define all(x) (x).begin(), (x).end()", "#define sz(x) (int)(x).size()", ""}),
+    t({"#define debug(x) cerr << \"[DEBUG] \" << #x << \" = \" << (x) << \" (Line: \" << __LINE__ << \")\" << endl;", ""}),
     t({"const int MOD = 1e9 + 7;", "", "void myrtle() {", "    "}),
     i(0),
     t({"", "}", "", "int main() {", "    FASTIO();", "    int t; cin >> t;", "    while(t--)", "        myrtle();", "    return 0;", "}"}),
+  }),
+
+  -- Standalone Debug Snippet
+  s("db", {
+    t("debug("), i(1, "x"), t(");"),
   }),
 
   -- DSU Structure (Standalone)
@@ -46,7 +52,7 @@ return {
     t("priority_queue<"), i(1, "int"), t("> "), i(2, "pq"), t(";"),
   }),
 
-  -- Min-Priority Queue (Architectural Mirroring)
+  -- Min-Priority Queue
   s("minpq", {
     t("priority_queue<"), i(1, "int"), 
     t(", vector<"), f(mirror, {1}), 
