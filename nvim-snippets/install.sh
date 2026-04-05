@@ -84,7 +84,7 @@ EOF
     fi
 fi
 
-# 5. Update Plugins (Auto-Session, LuaSnip, nvim-cmp, Competitest)
+# 5. Update Plugins
 echo -e "${BLUE}==> Injecting plugin configurations...${NC}"
 PLUGINS_FILE="$NVIM_CONFIG/lua/plugins/init.lua"
 
@@ -98,11 +98,19 @@ if [ -f "$PLUGINS_FILE" ]; then
     lazy = false,
     opts = {
       received_files_extension = "cpp",
-      received_problems_path = "\$(CWD)/\$(PROBLEM).\$(EXTENSION)",
-      received_contests_directory = "\$(CWD)",
-      received_contests_problems_path = "\$(PROBLEM).\$(EXTENSION)",
-      compile_command = "g++ -O2 -Wall \$(FNAME) -o \$(FNOEXT)",
-      run_command = "./\$(FNOEXT)",
+      received_problems = {
+        filename = "\$(PROBLEM).\$(EXTENSION)",
+      },
+      received_contests = {
+        directory = "\$(CWD)",
+        filename = "\$(PROBLEM).\$(EXTENSION)",
+      },
+      compile_command = {
+        cpp = { exec = "g++", args = { "-O2", "-Wall", "\$(FNAME)", "-o", "\$(FNOEXT)" } },
+      },
+      run_command = {
+        cpp = { exec = "./\$(FNOEXT)" },
+      },
     },
   },
 
