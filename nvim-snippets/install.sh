@@ -69,6 +69,13 @@ end, { desc = "C++ Compile and Run (Interactive)" })
 -- Insert debug print for word under cursor
 vim.keymap.set("n", "<leader>db", "odebug(<C-r><C-w>);<Esc>", { desc = "Insert C++ debug print" })
 
+-- Competitest Mappings
+vim.keymap.set("n", "<leader>tc", "<cmd>Competitest receive contest<cr>", { desc = "Receive whole contest" })
+vim.keymap.set("n", "<leader>tp", "<cmd>Competitest receive problem<cr>", { desc = "Receive single problem" })
+vim.keymap.set("n", "<leader>tr", "<cmd>Competitest run<cr>", { desc = "Run test cases" })
+vim.keymap.set("n", "<leader>ta", "<cmd>Competitest add_testcase<cr>", { desc = "Add test case" })
+vim.keymap.set("n", "<leader>te", "<cmd>Competitest edit_testcase<cr>", { desc = "Edit test case" })
+
 -- Manual Snippet Expansion fallback
 vim.keymap.set("i", "<C-k>", function()
   require("luasnip").expand()
@@ -77,22 +84,35 @@ EOF
     fi
 fi
 
-# 5. Update Plugins (Auto-Session, LuaSnip, nvim-cmp)
+# 5. Update Plugins (Auto-Session, LuaSnip, nvim-cmp, Competitest)
 echo -e "${BLUE}==> Injecting plugin configurations...${NC}"
 PLUGINS_FILE="$NVIM_CONFIG/lua/plugins/init.lua"
 
 if [ -f "$PLUGINS_FILE" ]; then
-    # Use a temporary file to build the new config
-    if ! grep -q "rmagatti/auto-session" "$PLUGINS_FILE"; then
-        # Find the last closing brace and insert before it
+    if ! grep -q "xeluxee/competitest.nvim" "$PLUGINS_FILE"; then
         sed -i '$d' "$PLUGINS_FILE"
         cat >> "$PLUGINS_FILE" <<EOF
   {
-    "rmagatti/auto-session",
+    "xeluxee/competitest.nvim",
+    dependencies = "muniftanjim/nui.nvim",
     lazy = false,
     opts = {
+      received_files_extension = "cpp",
+      received_problems_path = "\$(CWD)/\$(PROBLEM).\$(EXTENSION)",
+      received_contests_directory = "\$(CWD)",
+      received_contests_problems_path = "\$(PROBLEM).\$(EXTENSION)",
+      compile_command = "g++ -O2 -Wall \$(FNAME) -o \$(FNOEXT)",
+      run_command = "./\$(FNOEXT)",
+    },
+  },
+
+  {
+    "rmagatti/auto-session",
+    lazy = false,
+    dependencies = { "nvim-telescope/telescope.nvim" },
+    opts = {
       auto_restore_enabled = true,
-      auto_session_suppress_dirs = { "~/", "~/Projects", "~/Downloads", "/" },
+      auto_session_suppress_dirs = { "~/", "~/Projects", "~/Downloads", "/", "~/Documents", "~/Pictures" },
     },
   },
 
