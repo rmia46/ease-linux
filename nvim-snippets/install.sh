@@ -17,7 +17,7 @@ SNIPPETS_DIR="$NVIM_CONFIG/lua/custom/snippets"
 echo -e "${BLUE}==> Setting up snippets directory...${NC}"
 mkdir -p "$SNIPPETS_DIR"
 
-# 2. Copy Snippets (using relative path from script location)
+# 2. Copy Snippets
 echo -e "${BLUE}==> Deploying C++ snippets...${NC}"
 if [ -f "$SCRIPT_DIR/snippets/cpp.lua" ]; then
     cp "$SCRIPT_DIR/snippets/cpp.lua" "$SNIPPETS_DIR/cpp.lua"
@@ -41,8 +41,6 @@ opt.softtabstop = 4
 opt.expandtab = true
 EOF
     fi
-else
-    echo -e "${RED}==> Warning: $NVIM_CONFIG/lua/options.lua not found. Skipping indentation setup.${NC}"
 fi
 
 # 4. Update Mappings
@@ -77,9 +75,62 @@ vim.keymap.set("i", "<C-k>", function()
 end, { desc = "Expand snippet" })
 EOF
     fi
-else
-     echo -e "${RED}==> Warning: $NVIM_CONFIG/lua/mappings.lua not found. Skipping mapping injection.${NC}"
 fi
 
-echo -e "${GREEN}==> Setup Complete! Please restart Neovim.${NC}"
-echo -e "${BLUE}==> Note: Ensure L3MON4D3/LuaSnip and hrsh7th/nvim-cmp are configured in your plugins/init.lua.${NC}"
+# 5. Update Plugins (Auto-Session, LuaSnip, nvim-cmp)
+echo -e "${BLUE}==> Injecting plugin configurations...${NC}"
+PLUGINS_FILE="$NVIM_CONFIG/lua/plugins/init.lua"
+
+if [ -f "$PLUGINS_FILE" ]; then
+    # Use a temporary file to build the new config
+    if ! grep -q "rmagatti/auto-session" "$PLUGINS_FILE"; then
+        # Find the last closing brace and insert before it
+        sed -i '$d' "$PLUGINS_FILE"
+        cat >> "$PLUGINS_FILE" <<EOF
+  {
+    "rmagatti/auto-session",
+    lazy = false,
+    opts = {
+      auto_restore_enabled = true,
+      auto_session_suppress_dirs = { "~/", "~/Projects", "~/Downloads", "/" },
+    },
+  },
+
+  {
+    "L3MON4D3/LuaSnip",
+    config = function(_, opts)
+      require("luasnip").setup(opts)
+      require("luasnip.loaders.from_lua").lazy_load({
+        paths = { vim.fn.stdpath("config") .. "/lua/custom/snippets" }
+      })
+    end,
+  },
+
+  {
+    "hrsh7th/nvim-cmp",
+    opts = function(_, opts)
+      local cmp = require "cmp"
+      local luasnip = require "luasnip"
+      opts.sources = {
+        { name = "nvim_lsp" },
+        { name = "luasnip" },
+        { name = "buffer" },
+        { name = "nvim_lua" },
+        { name = "path" },
+      }
+      opts.mapping["<Tab>"] = cmp.mapping(function(fallback)
+        if cmp.visible() then cmp.select_next_item()
+        elseif luasnip.expand_or_jumpable() then luasnip.expand_or_jump()
+        else fallback() end
+      end, { "i", "s" })
+      return opts
+    end,
+  },
+}
+EOF
+        echo -e "${GREEN}==> Plugins registered successfully.${NC}"
+    fi
+fi
+
+echo -e "${GREEN}==> Setup Complete! Everything is installed and configured.${NC}"
+echo -e "${BLUE}==> Please restart Neovim to apply changes.${NC}"
