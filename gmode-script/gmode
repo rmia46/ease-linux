@@ -1,22 +1,26 @@
 #!/bin/bash
 
 # gmode - GPU/CPU performance mode script
-# Enhanced version with Profiles and Custom values
+# Enhanced version with Profiles, Custom values, and Power Limits
 
 set -e
 
-# Hardware Constraints (Auto-detected if possible, but these are safe defaults for this system)
+# Hardware Constraints
 CPU_MIN=800
 CPU_MAX=3500
 GPU_MIN=210
 GPU_MAX=3105
 
-# Profiles: "CPU_MHz GPU_MHz"
+# Defaults
+DEFAULT_POWER_SHORT=25
+DEFAULT_POWER_LONG=30
+
+# Profiles: "CPU_MHz GPU_MHz PowerShort PowerLong"
 declare -A PROFILES
-PROFILES["powersave"]="1300 210"
-PROFILES["balanced"]="2200 2010"
-PROFILES["gmode-lite"]="2000 1905"
-PROFILES["gmode-max"]="2800 2400"
+PROFILES["powersave"]="1300 210 25 30"
+PROFILES["balanced"]="2200 2010 25 30"
+PROFILES["gmode-lite"]="2000 1905 25 30"
+PROFILES["gmode-max"]="2800 2400 35 40"
 
 show_help() {
     echo "Usage: gmode [OPTIONS]"
@@ -27,16 +31,17 @@ show_help() {
     echo "Custom values:"
     echo "  -c <mhz>       Set CPU max frequency (${CPU_MIN}-${CPU_MAX} MHz)"
     echo "  -g <mhz>       Set GPU locked frequency (${GPU_MIN}-${GPU_MAX} MHz)"
+    echo "  -w <short long> Set custom Power Package limits (e.g., -w \"35 40\")"
     echo ""
     echo "Options:"
-    echo "  -r             Reset (unlock) all clocks"
+    echo "  -r             Reset (unlock) all clocks and power limits to defaults"
     echo "  -s             Show current status"
     echo "  -h             Show this help message"
     echo ""
     echo "Available Profiles:"
     for p in "powersave" "balanced" "gmode-lite" "gmode-max"; do
-        read -r c g <<< "${PROFILES[$p]}"
-        printf "  %-12s: CPU %4dMHz, GPU %4dMHz\n" "$p" "$c" "$g"
+        read -r c g ps pl <<< "${PROFILES[$p]}"
+        printf "  %-12s: CPU %4dMHz, GPU %4dMHz, Power %dW/%dW\n" "$p" "$c" "$g" "$ps" "$pl"
     done
 }
 
@@ -44,12 +49,24 @@ show_status() {
     echo "--- Current Status ---"
     echo "CPU Scaling Max: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || echo "N/A") KHz"
     echo "GPU Locked Clocks: $(sudo nvidia-smi --query-gpu=clocks.applications.graphics --format=csv,noheader 2>/dev/null || echo "N/A")"
+    echo "Power Limits (Conf): $(grep "^power package" /etc/intel-undervolt.conf || echo "Not found")"
+    echo ""
     sudo nvidia-smi -d CLOCK
+}
+
+set_power_limit() {
+    local short=$1
+    local long=$2
+    echo "Setting Power Package limits to ${short}W (short) / ${long}W (long)..."
+    sudo sed -i "s/^power package .*/power package $short $long/" /etc/intel-undervolt.conf
+    sudo intel-undervolt apply > /dev/null
 }
 
 apply_settings() {
     local cpu=$1
     local gpu=$2
+    local p_short=$3
+    local p_long=$4
 
     if [ -n "$cpu" ]; then
         if (( cpu < CPU_MIN || cpu > CPU_MAX )); then
@@ -66,17 +83,21 @@ apply_settings() {
             exit 1
         fi
         echo "Locking GPU clocks to ${gpu}MHz..."
-        # nvidia-smi expects min,max. Locking to single value.
         sudo nvidia-smi --lock-gpu-clocks="$gpu,$gpu" > /dev/null
+    fi
+
+    if [ -n "$p_short" ] && [ -n "$p_long" ]; then
+        set_power_limit "$p_short" "$p_long"
     fi
     
     echo "Done."
 }
 
 reset_settings() {
-    echo "Resetting to default (unlocked) settings..."
+    echo "Resetting to default settings..."
     sudo cpupower frequency-set -u "${CPU_MAX}MHz" > /dev/null
     sudo nvidia-smi --reset-gpu-clocks > /dev/null
+    set_power_limit "$DEFAULT_POWER_SHORT" "$DEFAULT_POWER_LONG"
     echo "Reset complete."
 }
 
@@ -89,48 +110,37 @@ fi
 PROFILE=""
 CUSTOM_CPU=""
 CUSTOM_GPU=""
+CUSTOM_POWER=""
 
-while getopts "p:c:g:rsh" opt; do
+while getopts "p:c:g:w:rsh" opt; do
     case ${opt} in
-        p )
-            PROFILE=$OPTARG
-            ;;
-        c )
-            CUSTOM_CPU=$OPTARG
-            ;;
-        g )
-            CUSTOM_GPU=$OPTARG
-            ;;
-        r )
-            reset_settings
-            exit 0
-            ;;
-        s )
-            show_status
-            exit 0
-            ;;
-        h )
-            show_help
-            exit 0
-            ;;
-        \? )
-            show_help
-            exit 1
-            ;;
+        p ) PROFILE=$OPTARG ;;
+        c ) CUSTOM_CPU=$OPTARG ;;
+        g ) CUSTOM_GPU=$OPTARG ;;
+        w ) CUSTOM_POWER=$OPTARG ;;
+        r ) reset_settings; exit 0 ;;
+        s ) show_status; exit 0 ;;
+        h ) show_help; exit 0 ;;
+        \? ) show_help; exit 1 ;;
     esac
 done
 
 if [ -n "$PROFILE" ]; then
     if [[ -v PROFILES[$PROFILE] ]]; then
-        read -r c g <<< "${PROFILES[$PROFILE]}"
-        apply_settings "$c" "$g"
+        read -r c g ps pl <<< "${PROFILES[$PROFILE]}"
+        apply_settings "$c" "$g" "$ps" "$pl"
     else
         echo "Error: Unknown profile '$PROFILE'"
         echo "Available profiles: ${!PROFILES[*]}"
         exit 1
     fi
-elif [ -n "$CUSTOM_CPU" ] || [ -n "$CUSTOM_GPU" ]; then
-    apply_settings "$CUSTOM_CPU" "$CUSTOM_GPU"
+elif [ -n "$CUSTOM_CPU" ] || [ -n "$CUSTOM_GPU" ] || [ -n "$CUSTOM_POWER" ]; then
+    ps=""
+    pl=""
+    if [ -n "$CUSTOM_POWER" ]; then
+        read -r ps pl <<< "$CUSTOM_POWER"
+    fi
+    apply_settings "$CUSTOM_CPU" "$CUSTOM_GPU" "$ps" "$pl"
 else
     show_help
     exit 1
